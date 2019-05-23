@@ -1,4 +1,4 @@
-module YaoFlux
+module YaoAD
 
 using Zygote
 using Zygote: gradient, @adjoint

@@ -1,4 +1,4 @@
-using YaoFlux, Zygote
+using YaoAD, Zygote
 using LinearAlgebra, SparseArrays, LuxurySparse
 using Test, Random
 

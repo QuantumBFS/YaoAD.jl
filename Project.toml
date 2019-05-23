@@ -1,5 +1,6 @@
-name = "YaoFlux"
-uuid = "e06ad7bc-5795-54bd-b84a-0284c0717521"
+name = "YaoAD"
+uuid = "e108bb06-7d37-11e9-0d1f-f5eecd29b0e6"
+version = "0.1.0"
 
 [deps]
 BitBasis = "50ba71b6-fa0f-514d-ae9a-0916efc90dcf"

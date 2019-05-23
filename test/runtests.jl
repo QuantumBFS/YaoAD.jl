@@ -1,5 +1,5 @@
 using Zygote
-using YaoFlux, Yao, Random
+using YaoAD, Yao, Random
 using Test, LuxurySparse
 using SparseArrays
 

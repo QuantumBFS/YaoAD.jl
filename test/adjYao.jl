@@ -1,7 +1,7 @@
 using Test
 using Yao, Zygote
 using YaoBlocks: ConstGate
-using YaoFlux, Random
+using YaoAD, Random
 
 ng(f, θ, δ=1e-5) = (f(θ+δ/2) - f(θ-δ/2))/δ
 

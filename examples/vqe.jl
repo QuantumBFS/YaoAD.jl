@@ -1,5 +1,5 @@
 using Yao
-using YaoFlux
+using YaoAD
 using LinearAlgebra
 using QuAlgorithmZoo: heisenberg, random_diff_circuit, pair_ring
 
