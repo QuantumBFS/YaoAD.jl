@@ -4,7 +4,7 @@ Automatic differentiable quantum circuit.
 
 ## Install
 ```julia
-pkg> add <this repo.git>
+pkg> add git@github.com:QuantumBFS/YaoAD.git
 ```
 
 ## Run an example
@@ -21,4 +21,12 @@ julia examples/vqe.jl
 * `PutBlock`
 * `GeneralMatrixBlock`
 
+#### TODO-mat
+
 ### Tested `apply!` BP
+
+#### TODO-apply!
+* PutBlock{<:Any, <:Any, <:RotationGate}
+* PutBlock{<:Any, <:Any, <:ConstantGate}
+* ChainBlock
+* RotationGate
