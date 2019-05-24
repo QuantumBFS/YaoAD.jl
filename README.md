@@ -30,3 +30,6 @@ julia examples/vqe.jl
 * PutBlock{<:Any, <:Any, <:ConstantGate}
 * ChainBlock
 * RotationGate
+
+* focus!
+* relax!

@@ -73,6 +73,11 @@ end
     adjy->(nothing, nothing, adjy.content, nothing)
 end
 
+@adjoint function ControlBlock{N, <:ConstantGate, C, M}(ctrl_locs, ctrl_config, block, locs) where {N, C, M, BT<:AbstractBlock}
+    ControlBlock{N, BT, C, M}(ctrl_locs, ctrl_config, block, locs),
+    adjy->(nothing, nothing, nothing, nothing)
+end
+
 @adjoint function YaoBlocks.cunmat(nbit::Int, cbits::NTuple{C, Int}, cvals::NTuple{C, Int}, U0::AbstractMatrix, locs::NTuple{M, Int}) where {C, M}
     y = YaoBlocks.cunmat(nbit, cbits, cvals, U0, locs)
     y, adjy-> (nothing, nothing, nothing, adjcunmat(y, adjy, nbit, cbits, cvals, U0, locs), nothing)
