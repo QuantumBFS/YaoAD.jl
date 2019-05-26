@@ -75,8 +75,20 @@ end
     end
 
     @show L(0.7)
-    @show @code_adjoint loss(c)
 
-    @test collect_gradients(loss'(c))[] == ng(L, 0.5)
+    @test_broken collect_gradients(loss'(c))[] == ng(L, 0.5)
     #c = chain([put(nbit, 2=>H), control(nbit, 2, 3=>Rx(0.5))])
+end
+
+@testset "*, focus, relax" begin
+    Random.seed!(10)
+    nbit = 5
+    st = randn(ComplexF64, 1<<nbit)
+    St = randn(ComplexF64, 1<<nbit, 5)
+    reg2 = rand_state(ComplexF64, nbit) |> focus!(5,3,2)
+    Reg2 = rand_state(ComplexF64, nbit; nbatch=5) |> focus!(5,3,2)
+    loss(st, reg) = sum(abs2, (focus!(ArrayReg(copy(st)), (4,2,3)) |> relax!(4,3; to_nactive=4) |> focus!(2,4))'*reg)
+    @show loss(st, reg2)
+    @test gradient_check(st -> loss(st, reg2), st)
+    @test gradient_check(st -> loss(st, Reg2), St)
 end

@@ -124,3 +124,41 @@ end
     end
 end
 =#
+
+@adjoint! function focus!(reg::AbstractRegister, locs)
+    nbit = nactive(reg)
+    focus!(reg, locs),
+    function (adjy)
+        relax!(adjy, locs; to_nactive=nbit)
+        #grad_mut(__context__, reg).x = adjy
+        (adjy, nothing)
+    end
+end
+
+@adjoint! function relax!(reg::AbstractRegister, locs; to_nactive=nbit)
+    relax!(reg, locs; to_nactive=to_nactive),
+    function (adjy)
+        focus!(adjy, locs)
+        #grad_mut(__context__, reg).x = adjy
+        (adjy, nothing)
+    end
+end
+
+@adjoint function *(A::AdjointArrayReg{1}, B::ArrayReg{1})
+    A*B, adjy->((conj(adjy)*B)', A'*adjy)
+end
+
+@adjoint function *(A::AdjointArrayReg{BA}, B::ArrayReg{BA}) where BA
+    A*B,
+    function (adjy)
+        adjA = copy(B)
+        adjB = copy(parent(A))
+        sA = relaxedvec(adjA)
+        sB = relaxedvec(adjB)
+        for i=1:BA
+            sA[:,i] *= conj(adjy[i])
+            sB[:,i] *= adjy[i]
+        end
+        (adjA', adjB)
+    end
+end

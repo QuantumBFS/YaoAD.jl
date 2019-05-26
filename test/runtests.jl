@@ -7,6 +7,10 @@ using SparseArrays
     include("adjbase.jl")
 end
 
-@testset "adjYao" begin
-    include("adjYao.jl")
+@testset "adjapply" begin
+    include("adjapply.jl")
+end
+
+@testset "adjmat" begin
+    include("adjmat.jl")
 end

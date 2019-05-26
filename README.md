@@ -13,24 +13,22 @@ julia examples/vqe.jl
 ```
 
 ## Table of Supported AD Blocks
-### Tested `mat` BP
-* `KronBlock`
-* `ChainBlock`
-* `RotationGate`
-* `TimeEvolution`
-* `PutBlock`
-* `GeneralMatrixBlock`
+### `mat` BP
+* [x] `KronBlock`
+* [x] `ChainBlock`
+* [x] `RotationGate`
+* [x] `TimeEvolution`
+* [x] `ShiftGate`
+* [x] `PutBlock`
+* [x] `GeneralMatrixBlock`
 
-#### TODO-mat
+### `apply!` BP
 
-### Tested `apply!` BP
+* [ ] `PutBlock{<:Any, <:Any, <:RotationGate}`
+* [ ] `PutBlock{<:Any, <:Any, <:ConstantGate}`
+* [ ] `ChainBlock`
+* [x] `RotationGate`
+* [ ] `ShiftGate`
 
-#### TODO-apply!
-* PutBlock{<:Any, <:Any, <:RotationGate}
-* PutBlock{<:Any, <:Any, <:ConstantGate}
-* ChainBlock
-* RotationGate
-* ShiftGate
-
-* focus!
-* relax!
+* [x] `focus!`
+* [x] `relax!`
