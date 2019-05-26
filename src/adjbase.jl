@@ -85,6 +85,8 @@ end
 
 @adjoint Iterators.reverse(x::T) where T = Iterators.reverse(x), adjy->(collect(Iterators.reverse(adjy)),)  # convert is better
 @adjoint Pair{T1, T2}(a, b) where {T1, T2} = Pair{T1, T2}(a, b), adjy->(adjy.first, adjy.second)
+@adjoint sum(x::Number; dims=:) = sum(x; dims=dims), adjy->(adjy,)
+@adjoint sum(f, x::Number; dims=:) = Zygote._forward(f, x)
 
 # data projection
 @adjoint function *(sp::Union{SDSparseMatrixCSC, SDDiagonal, SDPermMatrix}, v::AbstractVector)
@@ -99,22 +101,33 @@ end
     v*sp, adjy -> (adjy*(sp*v2)', adjy*projection(sp, v', v2'), adjy*(v*sp)')
 end
 
-function outer_projection(y::SDSparseMatrixCSC, adjy, v)
-    # adjy*v^T
+@inline function outer_projection(y::AbstractMatrix, adjy, v)
     out = zero(y)
-    is, js, vs = findnz(y)
+    outer_projection!(out, adjy, v)
+end
+
+@inline function outer_projection!(out::SparseMatrixCSC, adjy, v)
+    # adjy*v^T
+    is, js, vs = findnz(out)
     for (k,(i,j)) in enumerate(zip(is, js))
-        @inbounds out.nzval[k] = adjy[i]*v[j]
+        @inbounds out.nzval[k] += adjy[i]*v[j]
     end
     out
 end
 
-outer_projection(y::SDDiagonal, adjy, v) = Diagonal(adjy.*v)
+outer_projection!(y::Diagonal, adjy, v) = (y.diag .+= adjy.*vec(v); y)
+@inline function outer_projection!(y::PermMatrix, adjy, v)
+    for i=1:size(y, 1)
+        @inbounds y.vals[i] += adjy[i] * v[y.perm[i]]
+    end
+    y
+end
+outer_projection!(y::Matrix, adjy, v) = y .+= adjy.*v
 
 """
 Project a dense matrix to a sparse matrix
 """
-function projection(y::AbstractSparseMatrix, m::AbstractMatrix)
+@inline function projection(y::AbstractSparseMatrix, m::AbstractMatrix)
     out = zero(y)
     is, js, vs = findnz(y)
     for (k,(i,j)) in enumerate(zip(is, js))
@@ -125,7 +138,7 @@ end
 
 Base.zero(pm::PermMatrix) = PermMatrix(pm.perm, zero(pm.vals))
 projection(y::SDDiagonal, m::AbstractMatrix) = Diagonal(diag(m))
-function projection(y::PermMatrix, m::AbstractMatrix)
+@inline function projection(y::PermMatrix, m::AbstractMatrix)
     res = zero(y)
     for i=1:size(res, 1)
         @inbounds res.vals[i] = m[i,res.perm[i]]

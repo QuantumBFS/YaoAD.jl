@@ -27,6 +27,10 @@ end
     RotationGate(G, θ), adjy->(nothing, adjy)
 end
 
+@adjoint function ShiftGate(θ::T) where T
+    ShiftGate(θ), adjy->(projection(θ, adjy.x.theta),)
+end
+
 @adjoint function TimeEvolution(H, dt)
     TimeEvolution(H, dt), adjy->(nothing, adjy)
 end
@@ -202,7 +206,7 @@ function collect_gradients(st, out=Any[])
     out
 end
 
-collect_gradients(st::Number, out=any[]) = push!(out, st)
-collect_gradients(st::Nothing, out=any[]) = out
+collect_gradients(st::Number, out=Any[]) = push!(out, st)
+collect_gradients(st::Nothing, out=Any[]) = out
 
 @adjoint YaoBlocks.decode_sign(args...) = YaoBlocks.decode_sign(args...), adjy->nothing

@@ -31,6 +31,9 @@ end
     gx(x) = (b'*(mat(put(nbit, 2=>Rx(x)))*b))[] |> real
     @test isapprox(gx'(θ), ng(gx, θ), atol=1e-4)
 
+    gs(x) = (b'*(mat(put(nbit, 2=>shift(x)))*b))[] |> real
+    @test isapprox(gs'(θ), ng(gs, θ), atol=1e-4)
+
     ru = rand_hermitian(2)
     gm(x) = (b'*(mat(put(nbit, 2=>matblock(x)))*b))[] |> real
     @test gradient_check(gm, ru)
@@ -64,7 +67,7 @@ end
 @testset "general mat grad" begin
     v = randn(ComplexF64, 4)
     circuit = chain(2, [put(2, 2=>Rx(0.0)), control(2, 1, 2=>Z), put(2, 2=>Rz(0.0))])
-    dispatch!(circuit, [0.4, 0.6])
+    circuit = dispatch!(circuit, [0.4, 0.6])
     function l1(circuit)
         (v'* mat(circuit) * v)[] |> real
     end
@@ -75,7 +78,8 @@ end
         dispatch!(circuit, params)   # dispatch! will fail for deep models!!!!!
         (v'* mat(circuit) * v)[] |> real
     end
-    @test_broken gradient_check(loss1, [0.4, 0.6])
+    @show loss1'([0.4, 0.5])
+    @test gradient_check(loss1, [0.4, 0.6])
 end
 
 @testset "kron mat grad" begin
@@ -97,3 +101,23 @@ end
     gkron3(x) = (b'*mat(kron(nbit, 4=>Rx(x), 1=>Ry(x+0.4)))*b)[] |> real
     @test isapprox(gkron3'(θ), ng(gkron3, θ), atol=1e-5)
 end
+
+
+v = randn(ComplexF64, 4)
+c = chain(2, [put(2, 2=>Rx(0.0)), control(2, 1, 2=>Z), put(2, 2=>Rz(0.0))])
+c = dispatch!(c, [0.4, 0.6])
+
+using Zygote: @code_adjoint
+@code_adjoint dispatch!(c, [0.4, 0.6])
+function l1(circuit)
+    (v'* mat(circuit) * v)[] |> real
+end
+
+@code_adjoint l1(c)
+
+function loss1(params)
+    dispatch!(c, params)   # dispatch! will fail for deep models!!!!!
+    (v'* mat(c) * v)[] |> real
+end
+@code_adjoint loss1([0.4, 0.6])
+loss1'([0.4, 0.6])

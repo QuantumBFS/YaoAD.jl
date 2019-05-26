@@ -1,9 +1,12 @@
-include("YaoAD.jl")
-using Main.YaoAD
-using Yao
-using Zygote: @adjoint, grad_mut, @adjoint!, @code_adjoint
 const CphaseGate{N, T} = ControlBlock{N,<:ShiftGate{T},<:Any}
 const Rotor{N, T} = Union{RotationGate{N, T}, PutBlock{N, <:Any, <:RotationGate{<:Any, T}}, CphaseGate{N, T}}
+
+dagger_map(G::Union{Val{:X}, Val{:Y}, Val{:Z}, Val{:H}, Val{:P0}, Val{:P1}}) = G
+dagger_map(G::Val{:T}) = Val(:Tdag)
+dagger_map(G::Val{:Tdag}) = Val(:T)
+dagger_map(G::Val{:Sdag}) = Val(:S)
+dagger_map(G::Val{:Pu}) = Val(:Pd)
+dagger_map(G::Val{:Pd}) = Val(:Pu)
 
 """
     generator(rot::Rotor) -> AbstractBlock
@@ -15,11 +18,15 @@ generator(rot::PutBlock{N, C, GT}) where {N, C, GT<:RotationGate} = PutBlock{N}(
 generator(c::CphaseGate{N}) where N = ControlBlock(N, c.ctrol_locs, ctrl_config, control(2,1,2=>Z), c.locs)
 
 @adjoint function ArrayReg{B}(raw::AbstractArray) where B
-    ArrayReg{B}(raw), adjy->(adjy.state,)
+    ArrayReg{B}(raw), adjy->(reshape(adjy.state, size(raw)),)
 end
 
 @adjoint function ArrayReg{B}(raw::ArrayReg) where B
     ArrayReg{B}(raw), adjy->(adjy,)
+end
+
+@adjoint function ArrayReg(raw::AbstractArray)
+    ArrayReg(raw), adjy->(reshape(adjy.state, size(raw)),)
 end
 
 @adjoint function copy(reg::ArrayReg) where B
@@ -34,17 +41,15 @@ end
 @adjoint Base.adjoint(reg::ArrayReg) = Base.adjoint(reg), adjy->(parent(adjy),)
 
 using Zygote
-function Zygote.grad_mut(reg::ArrayReg)
-    state = zero(reg.state)
-    state[1] = 1
-    ArrayReg(state)
-end
+Zygote.grad_mut(reg::ArrayReg) = Ref{Any}(ArrayReg(zero(reg.state)))
 
-@adjoint! function apply!(reg::AbstractRegister, block)
+const NoDiffGate = Union{ConstantGate{N}, PutBlock{N, <:Any, <:ConstantGate}, ControlBlock{N, <:ConstantGate}} where N
+
+@adjoint! function apply!(reg::AbstractRegister, block::Union{NoDiffGate, Rotor})
     x = copy(reg)
     apply!(reg, block),
     function (adjy)
-        grad_mut(__context__, reg).state = adjy.state
+        grad_mut(__context__, reg).x = adjy
         adjapply!(x, adjy, block)
     end
 end
@@ -56,69 +61,66 @@ function adjapply!(x, adjy::AbstractRegister, block::Rotor{N, T}) where {N, T}
     (adjy, dx)
 end
 
-function adjapply!(x, adjy::AbstractRegister, block::Union{ConstantGate, PutBlock{<:Any, <:Any, <:ConstantGate}, ControlBlock{<:Any, <:ConstantGate}}) where {N, T}
+function adjapply!(x, adjy::AbstractRegister, block::NoDiffGate)
     apply!(adjy, block')
     #apply!(y, block')
     (adjy, nothing)
 end
 
-@adjoint! function dispatch!(circuit, params)
-    dispatch!(circuit, params),
-    function (adjy)
-        dstk = grad_mut(__context__, params)
-        dstk .+= collect_gradients(adjy)
-        (nothing, dstk)
-    end
-end
-
 @inline function adjunrows!(adjy, adjU, state::AbstractVector, inds::AbstractVector, U::AbstractMatrix)
-    @inbounds state[inds] = U*state[inds]
-    state
-    outer_projection(U, state_in, state_out)
+    @inbounds outer_projection!(adjU, adjy[inds], state[inds]')
+    @inbounds adjy[inds] = U'*adjy[inds]
 end
 
 @inline function adjunrows!(adjy, adjU, state::AbstractMatrix, inds::AbstractVector, U::AbstractMatrix)
     @inbounds for k in 1:size(state, 2)
-        state[inds, k] = U*state[inds, k]
+        @inbounds outer_projection!(adjU, adjy[inds, k], state[inds, k]')
+        @inbounds adjy[inds, k] = U'*adjy[inds, k]
     end
-    state
 end
 
-using YaoArrayRegister: _prepare_instruct, _instruct!
-@adjoint _prepare_instruct(args...) = _prepair_instruct(args...), adjy->nothing
-@adjoint! function _instruct!(state::AbstractVecOrMat{T}, U::AbstractMatrix{T}, locs_raw::SVector, ic::IterControl) where T
+@inline adjunrows!(adjy, adjU, state::AbstractVector, inds::AbstractVector, U::IMatrix) = nothing
+
+using YaoArrayRegister: _prepare_instruct, _instruct!, autostatic, sort_unitary
+using YaoBlocks: _check_size
+@adjoint autostatic(A; kwargs...) = autostatic(A; kwargs...), adjy->(adjy,)
+@adjoint function sort_unitary(U::AbstractMatrix, locs::NTuple{N, Int}) where N
+    sort_unitary(U, locs), adjy->(sort_unitary(adjy, locs|>TupleTools.sortperm), nothing)
+end
+@adjoint _check_size(args...) = _check_size(args...), adjy->nothing
+@adjoint _prepare_instruct(args...) = _prepare_instruct(args...), adjy->nothing
+@adjoint! function _instruct!(state::AbstractVecOrMat{T}, U::AbstractMatrix{T}, locs_raw, ic::IterControl) where T
     x = copy(state)
     _instruct!(state, U, locs_raw, ic),
     function (adjy)
+        adjU = _render_adjU(U)
         controldo(ic) do i
             adjunrows!(adjy, adjU, x, locs_raw .+ i, U)
         end
+        #grad_mut(__context__, state) .= adjy
         (adjy, adjU, nothing, nothing)
     end
 end
 
-using Test, Random
-ng(f, θ, δ=1e-5) = (f(θ+δ/2) - f(θ-δ/2))/δ
-
-@testset "apply! rotor" begin
-    nbit = 1
-    θ = 0.5
-    # Chain Block
-    Random.seed!(4)
-
-    reg = rand_state(1)
-    h = Z
-    f(x) = expect(h, apply!(copy(reg), Rx(x))) |> real
-    #display(@code_adjoint f(θ))
-    @test isapprox(f'(θ), ng(f, θ), atol=1e-4)
-
-    g(x) = expect(h, apply!(apply!(copy(reg), Rx(x)), Ry(x))) |> real
-    @test isapprox(g'(θ), ng(g, θ), atol=1e-4)
-
-    nbit = 5
-    operator = rand_unitary(2)
-    b = randn(ComplexF64, 1<<nbit)
-    h(operator) = abs(b'*instruct!(b, operator, (2,), (), ()))
-    @show h(operator)
-    @test gradient_check(h, operator)
+#=  do we really need this?
+@adjoint! function instruct!(state::AbstractVecOrMat{T}, symbol::Val, locs::NTuple{N, Int}) where {T, N}
+    instruct!(state, symbol, locs),
+    function (adjy)
+        instruct!(adjy, dagger_map(symbol), locs),
+        (adjy, nothing, nothing)
+    end
 end
+
+@adjoint! function instruct!(
+    state::AbstractVecOrMat{T}, symbol::Val,
+    locs::NTuple{N1, Int},
+    control_locs::NTuple{N2, Int},
+    control_bits::NTuple{N3, Int}) where {T, N1, N2, N3}
+
+    instruct!(state, symbol, locs),
+    function (adjy)
+        instruct!(adjy, dagger_map(symbol), locs, control_locs, control_bits),
+        (adjy, nothing, nothing, nothing, nothing)
+    end
+end
+=#
