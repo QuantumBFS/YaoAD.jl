@@ -2,6 +2,8 @@
 
 Automatic differentiable quantum circuit.
 
+**NOTE** This repo is deprecated, the functionality is in YaoBlocks now. You should be able to use them simply by just `using Yao`
+
 ## Install
 ```julia
 pkg> add git@github.com:QuantumBFS/YaoAD.git
